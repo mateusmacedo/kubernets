@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: localstack-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-path
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: localstack-cfg
+data:
+  localstack.env: |
+    SERVICES=s3,sqs,sns,ses,lambda
+    DEFAULT_REGION=us-east-1
+    DATA_DIR=/data/localstack
+    DEBUG=1
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: localstack
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: localstack
+  template:
+    metadata:
+      labels:
+        app: localstack
+    spec:
+      containers:
+        - name: localstack
+          image: localstack/localstack:latest
+          ports:
+            - containerPort: 4566
+          envFrom:
+            - configMapRef:
+                name: localstack-cfg
+          volumeMounts:
+            - name: localstack-data
+              mountPath: /data/localstack
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: localstack-data
+          persistentVolumeClaim:
+            claimName: localstack-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: localstack-svc
+spec:
+  selector:
+    app: localstack
+  ports:
+    - protocol: TCP
+      port: 4566
+      targetPort: 4566
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: localstack-lb
+spec:
+  selector:
+    app: localstack
+  ports:
+    - protocol: TCP
+      port: 4566
+      targetPort: 4566
+  type: LoadBalancer
+  externalTrafficPolicy: Local

@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zookeeper-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-path
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zookeeper-cfg
+data:
+  zoo.cfg: |-
+    tickTime=2000
+    dataDir=/data
+    clientPort=2181
+    initLimit=5
+    syncLimit=2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: zookeeper:latest
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          ports:
+            - name: client
+              containerPort: 2181
+          volumeMounts:
+            - name: zookeeper-pvc
+              mountPath: /data
+            - name: zookeeper-cfg
+              mountPath: /conf
+      volumes:
+        - name: zookeeper-pvc
+          persistentVolumeClaim:
+            claimName: zookeeper-pvc
+        - name: zookeeper-cfg
+          configMap:
+            name: zookeeper-cfg
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: zookeeper
+  ports:
+    - name: client
+      port: 2181
+      targetPort: 2181
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-lb
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: zookeeper
+  ports:
+    - name: client
+      port: 2181
+      targetPort: 2181
