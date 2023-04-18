@@ -5,19 +5,10 @@ metadata:
 type: Opaque
 data:
   nodered-credential-secret: c2VjcmV0
+  aws-access-key-id: a2V5
+  aws-secret-access-key: c2VjcmV0
+  db_password: bm9kZXJlZA==
 
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: nodered-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
-  storageClassName: local-path
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -35,22 +26,22 @@ spec:
     spec:
       containers:
         - name: nodered
-          image: macedodosanjosmateus/nodered:dev
+          image: macedodosanjosmateus/nodered-poc:latest
           imagePullPolicy: Always
           resources:
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 1000m
+              memory: 1024Mi
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 500m
+              memory: 256Mi
           ports:
             - containerPort: 1880
           env:
             - name: TZ
               value: America/Sao_Paulo
             - name: NODE_RED_ENABLE_SAFE_MODE
-              value: "true"
+              value: "false"
             - name: NODE_RED_ENABLE_PROJECTS
               value: "true"
             - name: NODE_RED_CREDENTIAL_SECRET
@@ -58,13 +49,38 @@ spec:
                 secretKeyRef:
                   name: nodered-sct
                   key: nodered-credential-secret
-          volumeMounts:
-            - name: nodered-pvc
-              mountPath: /data
-      volumes:
-        - name: nodered-pvc
-          persistentVolumeClaim:
-            claimName: nodered-pvc
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: nodered-sct
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nodered-sct
+                  key: aws-secret-access-key
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+            - name: KAFKA_BROKERS
+              value: kafka-svc.infra.svc.cluster.local:9092
+            - name: KAFKA_TOPIC
+              value: http.kafka.integration
+            - name: AWS_QUEUE_URL
+              value: http://localstack-svc.infra.svc.cluster.local:4566/000000000000/http-sqs-integration
+            - name: POSTGRESQL_HOST
+              value: postgres-svc.infra.svc.cluster.local
+            - name: POSTGRESQL_PORT
+              value: "5432"
+            - name: NODE_RED_DB
+              value: nodered_db
+            - name: NODE_RED_DB_USER
+              value: nodered
+            - name: NODE_RED_DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: nodered-sct
+                  key: db_password
+
 ---
 apiVersion: v1
 kind: Service
@@ -78,6 +94,21 @@ spec:
     - name: nodered
       port: 1880
       targetPort: 1880
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodered-lb-svc
+spec:
+  type: LoadBalancer
+  selector:
+    app: nodered
+  ports:
+    - name: nodered
+      port: 1880
+      targetPort: 1880
+
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -94,6 +125,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: nodered-svc
+                name: nodered-lb-svc
                 port:
                   number: 1880

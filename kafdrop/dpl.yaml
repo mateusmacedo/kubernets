@@ -18,13 +18,13 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 384Mi
             requests:
               cpu: 250m
               memory: 256Mi
           env:
             - name: KAFKA_BROKERCONNECT
-              value: kafka-svc.default.svc.cluster.local:9092
+              value: kafka-svc.infra.svc.cluster.local:9092
             - name: JVM_OPTS
               value: "-Xms32M -Xmx64M"
             - name: SERVER_SERVLET_CONTEXTPATH

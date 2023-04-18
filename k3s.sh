@@ -25,6 +25,7 @@ chmod 600 ~/.kube/config
 
 kubectl get nodes
 kubectl get pods --all-namespaces
+
 # Install cert-manager
 kubectl create namespace cert-manager
 helm repo add cert-manager https://charts.jetstack.io

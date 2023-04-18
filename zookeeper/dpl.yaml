@@ -41,11 +41,11 @@ spec:
           image: zookeeper:latest
           resources:
             limits:
-              cpu: 500m
-              memory: 1Gi
-            requests:
               cpu: 250m
-              memory: 512Mi
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
           ports:
             - name: client
               containerPort: 2181
