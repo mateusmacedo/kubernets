@@ -1,0 +1,123 @@
+---
+apiVersion: v1
+data:
+  postgres.conf: |
+    max_connections = 100
+    shared_buffers = 128MB
+    effective_cache_size = 512MB
+    maintenance_work_mem = 256MB
+    checkpoint_completion_target = 0.7
+    wal_buffers = 16MB
+    default_statistics_target = 100
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    work_mem = 2621kB
+    min_wal_size = 1GB
+    max_wal_size = 2GB
+    max_worker_processes = 8
+    max_parallel_workers_per_gather = 4
+    max_parallel_workers = 8
+kind: ConfigMap
+metadata:
+  name: postgres-cfg
+  namespace: infrastructure
+---
+apiVersion: v1
+data:
+  postgres-password: cG9zdGdyZXM=
+  postgres-user: cG9zdGdyZXM=
+kind: Secret
+metadata:
+  name: postgres-sct
+  namespace: infrastructure
+type: Opaque
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: infrastructure
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: infrastructure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_DB
+          value: postgres
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              key: postgres-user
+              name: postgres-sct
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-password
+              name: postgres-sct
+        image: postgres:alpine3.18
+        imagePullPolicy: Always
+        name: postgres
+        ports:
+        - containerPort: 5432
+          name: postgres
+        resources:
+          limits:
+            cpu: 1000m
+            ephemeral-storage: 2Gi
+            memory: 1024Mi
+          requests:
+            cpu: 250m
+            ephemeral-storage: 1Gi
+            memory: 256Mi
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-data
+        - mountPath: /etc/postgresql/postgres.conf
+          name: postgres-cfg
+          subPath: postgres.conf
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - configMap:
+          name: postgres-cfg
+        name: postgres-cfg
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-svc
+  namespace: infrastructure
+spec:
+  externalIPs:
+  - 192.168.0.138
+  ports:
+  - name: postgres
+    port: 5432
+  selector:
+    app: postgres

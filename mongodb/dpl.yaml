@@ -1,0 +1,81 @@
+---
+apiVersion: v1
+data:
+  MONGO_INITDB_ROOT_PASSWORD: cm9vdA==
+  MONGO_INITDB_ROOT_USERNAME: cm9vdA==
+kind: Secret
+metadata:
+  name: mongodb-scr
+  namespace: infrastructure
+type: Opaque
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: infrastructure
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: infrastructure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - envFrom:
+        - secretRef:
+            name: mongodb-scr
+        image: mongo:6.0
+        imagePullPolicy: Always
+        name: mongodb
+        resources:
+          limits:
+            cpu: 1000m
+            ephemeral-storage: 1Gi
+            memory: 1024Mi
+          requests:
+            cpu: 250m
+            ephemeral-storage: 1Gi
+            memory: 256Mi
+        volumeMounts:
+        - mountPath: /data
+          name: mongodb-data
+      volumes:
+      - name: mongodb-data
+        persistentVolumeClaim:
+          claimName: mongodb-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-svc
+  namespace: infrastructure
+spec:
+  externalIPs:
+  - 192.168.0.138
+  ports:
+  - name: mongodb
+    port: 27017
+  selector:
+    app: mongodb

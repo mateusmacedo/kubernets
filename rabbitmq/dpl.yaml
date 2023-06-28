@@ -1,0 +1,136 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: infrastructure
+  name: rabbitmq-cfg
+data:
+  enabled_plugins: |
+    [rabbitmq_management].
+  rabbitmq.conf: |
+    loopback_users.guest = false
+    management.listener.port = 15672
+    management.listener.ssl = false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: infrastructure
+  name: rabbitmq-sct
+type: Opaque
+data:
+  rabbitmq-username: cmFiYml0bXE=
+  rabbitmq-password: cmFiYml0bXE=
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: infrastructure
+  name: rabbitmq-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: infrastructure
+  name: rabbitmq
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3-management
+          imagePullPolicy: Always
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-sct
+                  key: rabbitmq-username
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-sct
+                  key: rabbitmq-password
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: management
+              containerPort: 15672
+          volumeMounts:
+            - name: rabbitmq-cfg
+              mountPath: /etc/rabbitmq
+            - name: rabbitmq-pvc
+              mountPath: /var/lib/rabbitmq
+          resources:
+            limits:
+              cpu: 1500m
+              ephemeral-storage: 2Gi
+              memory: 1536Mi
+            requests:
+              cpu: 250m
+              ephemeral-storage: 1Gi
+              memory: 256Mi
+      volumes:
+        - name: rabbitmq-cfg
+          configMap:
+            name: rabbitmq-cfg
+        - name: rabbitmq-pvc
+          persistentVolumeClaim:
+            claimName: rabbitmq-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: infrastructure
+  name: rabbitmq-svc
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+    - name: management
+      port: 15672
+  externalIPs:
+    - 192.168.0.138
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: infrastructure
+  name: rabbitmq-igs
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: rabbitmq.cluster.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rabbitmq-svc
+                port:
+                  name: management

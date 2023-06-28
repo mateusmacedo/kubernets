@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: support
+  name: plantuml-config
+data:
+  PLANTUML_LIMIT_SIZE: "8192"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: support
+  name: plantuml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plantuml
+  template:
+    metadata:
+      labels:
+        app: plantuml
+    spec:
+      containers:
+        - name: plantuml
+          image: plantuml/plantuml-server:jetty
+          env:
+            - name: PLANTUML_LIMIT_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: plantuml-config
+                  key: PLANTUML_LIMIT_SIZE
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 450m
+              memory: 512Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: support
+  name: plantuml-service
+spec:
+  selector:
+    app: plantuml
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+  externalIPs:
+    - 192.168.0.138
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: support
+  name: plantuml-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: plantuml.cluster.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: plantuml-service
+                port:
+                  number: 80

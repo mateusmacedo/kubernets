@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: infrastructure
+  name: kafdrop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafdrop
+  template:
+    metadata:
+      labels:
+        app: kafdrop
+    spec:
+      containers:
+        - name: kafdrop
+          image: obsidiandynamics/kafdrop:latest
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          env:
+            - name: KAFKA_BROKERCONNECT
+              value: kafka-svc.infrastructure.svc.cluster.local:9092
+            - name: JVM_OPTS
+              value: "-Xms32M -Xmx64M"
+            - name: SERVER_SERVLET_CONTEXTPATH
+              value: "/"
+          ports:
+            - name: http
+              containerPort: 9000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: infrastructure
+  name: kafdrop-svc
+spec:
+  selector:
+    app: kafdrop
+  ports:
+    - name: http
+      port: 9000
+  externalIPs:
+    - 192.168.0.138
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: infrastructure
+  name: kafdrop-igs
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: kafdrop.cluster.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kafdrop-svc
+                port:
+                  number: 9000

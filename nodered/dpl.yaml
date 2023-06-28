@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: apps
+  name: nodered-sct
+type: Opaque
+data:
+  nodered-credential-secret: c2VjcmV0
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: apps
+  name: nodered-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: apps
+  name: nodered
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nodered
+  template:
+    metadata:
+      labels:
+        app: nodered
+    spec:
+      containers:
+        - name: nodered
+          image: macedodosanjosmateus/nodered:dev
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 250m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          ports:
+            - containerPort: 1880
+          env:
+            - name: TZ
+              value: America/Sao_Paulo
+            - name: NODE_RED_ENABLE_SAFE_MODE
+              value: "true"
+            - name: NODE_RED_ENABLE_PROJECTS
+              value: "true"
+            - name: NODE_RED_CREDENTIAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nodered-sct
+                  key: nodered-credential-secret
+          volumeMounts:
+            - name: nodered-pvc
+              mountPath: /data
+      volumes:
+        - name: nodered-pvc
+          persistentVolumeClaim:
+            claimName: nodered-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: apps
+  name: nodered-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: nodered
+  ports:
+    - name: nodered
+      port: 1880
+      targetPort: 1880
+  externalIPs:
+    - 192.168.0.138
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: apps
+  name: nodered-igs
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: nodered.cluster.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nodered-svc
+                port:
+                  number: 1880
